@@ -12,11 +12,13 @@
 
 """
 import statistics
-a = []
-def avaranger(n):
-    a.append(n)
-    return statistics.mean(a)
+def avaranger():
+    a = []
+    def func(n):
+        a.append(n)
+        return statistics.mean(a)
+    return func
 
-
-res = [avaranger(int (i)) for i in input().split(' ')]
+avar = avaranger()
+res = [avar(int (i)) for i in input().split(' ')]
 print (' '.join([str(i) for i in res]))
