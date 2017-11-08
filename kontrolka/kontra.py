@@ -51,8 +51,8 @@ class Catalog(object):
         while loop:
             ans = input('Add a book? Y/N -> ')
             if ans == 'Y' or ans == 'y':
-                print('Add author title year')
-                row = [s for s in input().split(' ')]
+                print('Add author, title, year (", " is a musthave)')
+                row = [s for s in input().split(', ')]
                 self.books.append(row)
             elif ans == 'N' or ans == 'n':
                 loop = False
@@ -81,7 +81,7 @@ class Catalog(object):
         print(self.books)
 
     def save_file(self):
-        filename = input('Enter path (for ex. C:/Users\My_Usr\Desktop\File.txt)-> ')
+        filename = input('Enter path (for ex. C:\\Users\My_Usr\Desktop\File.txt)-> ')
         x = open(filename, 'a')
         x.close()
         x = open(filename, 'w')
