@@ -1,25 +1,38 @@
-from urllib.request import urlopen
-#  from bs4 import BeautifulSoup as Soup
-#  from datetime import datetime
-#  import psycopg2
+from datetime import datetime
 from html.parser import HTMLParser
+import psycopg2
+from urllib.request import urlopen
 
-# Будем юзать html.parser
 
-
-class MyHTMLParser(HTMLParser):
+class HabrahabrParser(HTMLParser):
     def __init__(self):
         HTMLParser.__init__(self)
-        self.title = False
+        self.titles = False
         self.hublink = False
         self.nick = False
+        self.article = False
+        self.ul = False
+        self.time = False
+
+        self.dict = {}
         self.table = []
+        self.hashtags = []
 
     def handle_starttag(self, tag, attrs):
+        if tag == 'article':
+            for name, value in attrs:
+                if name == 'class' and value == 'post post_preview':
+                    self.article = True
+
+        if tag == 'ul':
+            for name, value in attrs:
+                if name == 'class' and value == 'post__hubs inline-list':
+                    self.ul = True
+
         if tag == 'a':
             for name, value in attrs:
                 if name == 'class' and value == 'post__title_link':
-                    self.title = True
+                    self.titles = True
 
         if tag == 'a':
             for name, value in attrs:
@@ -28,73 +41,97 @@ class MyHTMLParser(HTMLParser):
 
         if tag == 'span':
             for name, value in attrs:
+                if name == 'class' and value == 'post__time':
+                    self.time = True
+
+        if tag == 'span':
+            for name, value in attrs:
                 if name == 'class' and value == 'user-info__nickname user-info__nickname_small':
                     self.nick = True
 
     def handle_data(self, data):
-        if self.title:
-            self.table.append({'title': data})
-        if self.hublink:
-            self.table.append({'hashtag': data})
-        if self.nick:
-            self.table.append({'nickname': data})
+        if self.article is True:
+            if self.titles:
+                self.dict['title'] = data
+            if self.ul is True:
+                if self.hublink:
+                    self.hashtags.append(data)
+                    self.dict['hashtags'] = self.hashtags
+                    # print(self.hashtags)
+            if self.nick:
+                self.dict['author'] = data
+            if self.time:
+                self.dict['time'] = self.parse_time(data)
 
     def handle_endtag(self, tag):
-        self.title = False
+        if tag == 'article':
+            self.article = False
+            self.table.append(self.dict)
+            self.dict = {}
+        if tag == 'ul':
+            self.ul = False
+            self.hashtags = []
+        self.titles = False
         self.hublink = False
         self.nick = False
+        self.time = False
 
-    def table_get(self):
-        for num, item in enumerate(self.table, 1):
-            print(f'{num}. {item}')
+    def parse_time(self, data):
+        month_values = {
+            'января': 1,
+            'февраля': 2,
+            'марта': 3,
+            'апреля': 4,
+            'мая': 5,
+            'июня': 6,
+            'июля': 7,
+            'августа': 8,
+            'сентября': 9,
+            'октября': 10,
+            'ноября': 10,
+            'декабря': 12, }
+
+        today_yesterday = {
+            'сегодня': '17 12 2017',
+            'вчера': '16 12 2017'
+        }
+        date_str = data
+        for k, v in month_values.items():
+            date_str = date_str.replace(k, str(v) + ' ' + str(datetime.now().year))
+
+        for k, v in today_yesterday.items():
+            date_str = date_str.replace(k, v)
+
+        datetime_object = datetime.strptime(date_str, '%d %m %Y в %H:%M')
+        return datetime_object
+
+    def connnect(self):
+        conn = psycopg2.connect(dbname='articles', user='postgres', password='gjufyrf')
+        cursor = conn.cursor()
+
+        for row in self.table:
+            cursor.execute("""
+            INSERT INTO public.tituser(title, author, time)
+            VALUES (%s, %s, %s);
+            """, (row['title'], row['author'], row['time']))
+            for tag in row['hashtags']:
+                cursor.execute("""
+                     INSERT INTO public.titusertags(title, hashtag)
+                     VALUES (%s, %s);
+                     """, (row['title'], tag))
+
+        conn.commit()
+
+        cursor.close()
+        conn.close()
 
 
-response = urlopen('https://habrahabr.ru/top/')
-html = response.read().decode('utf-8')
+if __name__ == '__main__':
+    for i in range(90):
+        response = urlopen('https://habrahabr.ru/top/monthly/page{num}/'.format(num=str(i)))
+        html = response.read().decode('utf-8')
 
-parser = MyHTMLParser()
-parser.feed(html)
-parser.table_get()
-
-
-#  Прости мыльце, тебя запретили :'-(
-# my_url = 'https://habrahabr.ru/top/'
-#
-# client = ureq(my_url)
-# page_html = client.read()
-# client.close()
-#
-# page_soup = Soup(page_html, 'html.parser')
-# ar_list = page_soup.find_all('article', {'class': 'post post_preview'})
-#
-#
-# table = []
-# for h2 in ar_list:
-#     link = h2.find('h2', {'class': 'post__title'}).find('a').get('href')
-#     text = h2.find('h2', {'class': 'post__title'}).find('a').text
-#     user = h2.find('span', {'class': 'user-info__nickname user-info__nickname_small'}).text
-#     link_us = h2.find('header', {'class': 'post__meta'}).find('a').get('href')
-#     time1 = str(datetime.strftime(datetime.now(), '%d/%m/%Y %H:%M:%S'))
-#     table.append({'title': text, 'url': link, 'usr': user, 'usr_link': link_us, 'time1': time1})
-#  for num, item in enumerate(table, 1):
-#      print(f'{num}. {item}')
-#
-#
-# conn = psycopg2.connect(dbname='habr', user='postgres', password='gjufyrf')
-# cursor = conn.cursor()
-#
-# # cursor.executemany("""INSERT INTO public.info(title,url,usr,usr_link,time1) VALUES (%(title)s, %(url)s,
-# # %(usr)s, %(usr_link)s, %(time1)s)""", table)
-# #
-# # conn.commit()
-#
-# cursor.execute("SELECT * FROM public.info")
-# rows = cursor.fetchall()
-# print("\nRows: \n")
-# for row in rows:
-#     print("   ", row)
-#
-# cursor.close()
-# conn.close()
-
+        parser = HabrahabrParser()
+        parser.feed(html)
+        parser.connnect()
 
